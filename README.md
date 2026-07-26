@@ -65,13 +65,13 @@ $ tokn --json
 
 | Flag | What it does |
 |------|-------------|
-| `--ext .py` | Only count files with this extension. Repeatable. |
-| `--exclude-ext .pyc` | Skip files with this extension. Repeatable. |
-| `--hidden` | Count hidden files too. Hope you know what you're doing. |
-| `--model gpt-4o` | Use a specific model's tokenizer. Different models, different counts. |
-| `--per-file` | Show per-file breakdown. |
-| `--json` | Output as JSON. |
-| `--version` | `tokn 0.1.0 (gigatoken 0.9.0)` |
+| `--ext .py` `-e .py` | Only count files with this extension. Repeatable. |
+| `--exclude-ext .pyc` `-E .pyc` | Skip files with this extension. Repeatable. |
+| `--hidden` `-H` | Count hidden files too. Hope you know what you're doing. |
+| `--model gpt-4o` `-m gpt-4o` | Use a specific model's tokenizer. Different models, different counts. |
+| `--per-file` `-p` | Show per-file breakdown. |
+| `--json` `-j` | Output as JSON. |
+| `--version` `-v` | `tokn 0.1.0 (gigatoken 0.9.0)` |
 
 ## Why not just use `wc -c`?
 

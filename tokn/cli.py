@@ -309,34 +309,33 @@ def main() -> None:
         help="Include ONLY files with this extension (repeatable). Without this, ALL types are included.",
     )
     ap.add_argument(
-        "--exclude-ext",
+        "--exclude-ext", "-E",
         action="append",
         default=[],
         help="Exclude files with this extension (repeatable).",
     )
     ap.add_argument(
-        "--hidden",
+        "--hidden", "-H",
         action="store_true",
         help="Include hidden files and directories.",
     )
     ap.add_argument(
-        "--model",
-        "-m",
+        "--model", "-m",
         default="gpt-4o",
         help="Model name to resolve tokenizer (default: gpt-4o).",
     )
     ap.add_argument(
-        "--per-file",
+        "--per-file", "-p",
         action="store_true",
         help="Show per-file token counts before the total.",
     )
     ap.add_argument(
-        "--json",
+        "--json", "-j",
         action="store_true",
         help="Output results as JSON.",
     )
     ap.add_argument(
-        "--version",
+        "--version", "-v",
         action="version",
         version=_VERSION,
     )
