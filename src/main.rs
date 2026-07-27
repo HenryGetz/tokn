@@ -196,11 +196,13 @@ fn load_tokenizer(model: &str) -> Result<(Tokenizer, String)> {
     }
 
     // 2. Determine the HF repo ID.
-    let repo_id: Cow<str> = if gigatoken_rs::load_tokenizer::hub::looks_like_repo_id(model) {
-        Cow::Borrowed(model)
-    } else {
+    // Check known short names FIRST — looks_like_repo_id would match
+    // bare names like "gpt-4o" as valid repos, but those don't exist on HF.
+    let repo_id: Cow<str> =
         if let Some(&(_, mapped)) = MODEL_FALLBACK.iter().find(|&&(k, _)| k == model) {
             Cow::Borrowed(mapped)
+        } else if gigatoken_rs::load_tokenizer::hub::looks_like_repo_id(model) {
+            Cow::Borrowed(model)
         } else {
             eprintln!(
                 "{} unknown model '{}', falling back to {}",
@@ -209,8 +211,7 @@ fn load_tokenizer(model: &str) -> Result<(Tokenizer, String)> {
                 UNIVERSAL_FALLBACK
             );
             Cow::Borrowed(UNIVERSAL_FALLBACK)
-        }
-    };
+        };
 
     // 3. Download / locate tokenizer.json from HF Hub.
     let cached_path =
