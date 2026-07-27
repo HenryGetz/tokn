@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .slim/deepwork/
 *.egg-info/
+target/
