@@ -72,8 +72,10 @@ struct Cli {
     ///
     /// Examples: gpt-4o, gpt-4, gpt-3.5-turbo, Xenova/gpt-4o,
     /// openai-community/gpt2, or a local path to tokenizer.json.
-    #[arg(short = 'm', long = "model", default_value = "gpt-4o", value_name = "MODEL")]
-    model: String,
+    ///
+    /// Defaults to gpt-4o. Set TOKN_MODEL env var to change the default.
+    #[arg(short = 'm', long = "model", value_name = "MODEL")]
+    model: Option<String>,
 
     /// Show per-file token counts before the total.
     #[arg(short = 'p', long = "per-file")]
@@ -570,8 +572,22 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // Resolve model: CLI flag > TOKN_MODEL env var > hardcoded default
+    let (model, model_source) = if let Some(ref m) = cli.model {
+        (m.clone(), "from --model flag")
+    } else if let Ok(env_model) = std::env::var("TOKN_MODEL") {
+        let env_model = env_model.trim();
+        if !env_model.is_empty() {
+            (env_model.to_string(), "from TOKN_MODEL env")
+        } else {
+            ("gpt-4o".to_string(), "default")
+        }
+    } else {
+        ("gpt-4o".to_string(), "default")
+    };
+
     // Load tokenizer
-    let (mut tokenizer, resolver) = load_tokenizer(&cli.model)?;
+    let (mut tokenizer, resolver) = load_tokenizer(&model)?;
     let mut stats = RunStats {
         resolver,
         ..Default::default()
@@ -579,9 +595,10 @@ fn run() -> Result<()> {
 
     if cli.verbose {
         eprintln!(
-            "{} using tokenizer: {}",
-                dim_if_color("Info:".to_string()),
-            stats.resolver.bold()
+            "{} using tokenizer: {} ({})",
+            dim_if_color("Info:".to_string()),
+            stats.resolver.bold(),
+            model_source
         );
     }
 
@@ -991,7 +1008,7 @@ mod tests {
             extensions: vec![],
             exclude_extensions: vec![],
             hidden: false,
-            model: "gpt-4o".into(),
+            model: Some("gpt-4o".into()),
             per_file: false,
             json: false,
             sort: false,
@@ -1028,7 +1045,7 @@ mod tests {
             extensions: vec![],
             exclude_extensions: vec![],
             hidden: true,
-            model: "gpt-4o".into(),
+            model: Some("gpt-4o".into()),
             per_file: false,
             json: false,
             sort: false,
@@ -1062,7 +1079,7 @@ mod tests {
             extensions: vec![],
             exclude_extensions: vec![],
             hidden: true,
-            model: "gpt-4o".into(),
+            model: Some("gpt-4o".into()),
             per_file: false,
             json: false,
             sort: false,
@@ -1108,7 +1125,7 @@ mod tests {
             extensions: vec![],
             exclude_extensions: vec![],
             hidden: true,
-            model: "gpt-4o".into(),
+            model: Some("gpt-4o".into()),
             per_file: false,
             json: false,
             sort: false,

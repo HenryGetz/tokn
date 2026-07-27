@@ -554,3 +554,307 @@ fn test_extension_case_insensitive() {
     assert!(stdout.contains("a.PY"), "a.PY should appear (case-insensitive extension match)");
     assert!(!stdout.contains("b.RS"), "b.RS should NOT appear (rs != py)");
 }
+
+// ---------------------------------------------------------------------------
+// 20. test_env_var_default_model
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_env_var_default_model() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "hello.txt", "hello world");
+
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--color").arg("never")
+        .env("TOKN_MODEL", "openai-community/gpt2")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let output = std::str::from_utf8(&assert.get_output().stdout).unwrap().trim().to_string();
+    let count: usize = output.parse().unwrap();
+    assert!(count > 0, "Env var should set default model");
+}
+
+// ---------------------------------------------------------------------------
+// 21. test_env_var_overridden_by_flag
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_env_var_overridden_by_flag() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "hello.txt", "hello world");
+
+    // Set TOKN_MODEL to something that would fail, but override with --model
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--color").arg("never")
+        .arg("--model").arg("openai-community/gpt2")
+        .env("TOKN_MODEL", "nonexistent-model-999")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let output = std::str::from_utf8(&assert.get_output().stdout).unwrap().trim().to_string();
+    let count: usize = output.parse().unwrap();
+    assert!(count > 0, "Explicit --model should override TOKN_MODEL env var");
+}
+
+// ---------------------------------------------------------------------------
+// 22. test_sort_order
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sort_order() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "small.txt", "x");
+    write_file(tmp.path(), "medium.txt", "hello world");
+    // ~2 tokens per word, "hello world" repeated 10 times
+    write_file(tmp.path(), "large.txt", &"hello world ".repeat(10));
+
+    let assert = tokn_cmd()
+        .arg("--sort")
+        .arg("--per-file")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    // small.txt should appear before large.txt in sort (small count on top)
+    // Since --sort is descending by default, large.txt should appear first
+    let large_pos = stdout.find("large.txt").unwrap();
+    let small_pos = stdout.find("small.txt").unwrap();
+    let medium_pos = stdout.find("medium.txt").unwrap();
+    assert!(large_pos < medium_pos, "large.txt should appear before medium.txt");
+    assert!(medium_pos < small_pos, "medium.txt should appear before small.txt");
+}
+
+// ---------------------------------------------------------------------------
+// 23. test_sort_reverse_order
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sort_reverse_order() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "small.txt", "x");
+    write_file(tmp.path(), "medium.txt", "hello world");
+    write_file(tmp.path(), "large.txt", &"hello world ".repeat(10));
+
+    let assert = tokn_cmd()
+        .arg("--sort-reverse")
+        .arg("--per-file")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    let large_pos = stdout.find("large.txt").unwrap();
+    let small_pos = stdout.find("small.txt").unwrap();
+    let medium_pos = stdout.find("medium.txt").unwrap();
+    assert!(small_pos < medium_pos, "small.txt should appear before medium.txt (reverse)");
+    assert!(medium_pos < large_pos, "medium.txt should appear before large.txt (reverse)");
+}
+
+// ---------------------------------------------------------------------------
+// 24. test_verbose_output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_verbose_output() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "hello.txt", "hello world");
+
+    let assert = tokn_cmd()
+        .arg("--verbose")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stderr = std::str::from_utf8(&assert.get_output().stderr).unwrap();
+    assert!(stderr.contains("Info:"), "Verbose stderr should contain 'Info:'");
+    assert!(stderr.contains("tokenizer"), "Verbose stderr should mention tokenizer");
+    assert!(stderr.contains("found"), "Verbose stderr should mention file count");
+}
+
+// ---------------------------------------------------------------------------
+// 25. test_quiet_suppresses_warnings
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_quiet_suppresses_warnings() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "valid.txt", "hello");
+    fs::write(tmp.path().join("binary.bin"), &[0xFF, 0xFE]).unwrap();
+
+    let assert = tokn_cmd()
+        .arg("--quiet")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stderr = std::str::from_utf8(&assert.get_output().stderr).unwrap();
+    assert!(!stderr.contains("Warning:"), "Quiet mode should suppress warnings");
+}
+
+// ---------------------------------------------------------------------------
+// 26. test_max_depth_cli
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_max_depth_cli() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "root.txt", "x");
+    write_file(tmp.path(), "sub/sub.txt", "hello world");
+    write_file(tmp.path(), "sub/deep/deep.txt", "buried");
+
+    let assert = tokn_cmd()
+        .arg("--max-depth").arg("1")
+        .arg("--json")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(stdout).unwrap();
+    let files = parsed["files"].as_array().unwrap();
+
+    assert!(files.iter().any(|f| f["path"].as_str().unwrap().contains("root.txt")), "root.txt should appear");
+    assert!(files.iter().any(|f| f["path"].as_str().unwrap().contains("sub.txt")), "sub.txt should appear at depth 1");
+    assert!(!files.iter().any(|f| f["path"].as_str().unwrap().contains("deep.txt")), "deep.txt should NOT appear at max-depth 1");
+}
+
+// ---------------------------------------------------------------------------
+// 27. test_color_always_output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_color_always_output() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "hello.txt", "hello world");
+
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--color").arg("always")
+        .arg("--model").arg("openai-community/gpt2")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    assert!(stdout.contains("\x1b["), "Color always should produce ANSI codes");
+}
+
+// ---------------------------------------------------------------------------
+// 28. test_color_never_output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_color_never_output() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "hello.txt", "hello world");
+
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--color").arg("never")
+        .arg("--model").arg("openai-community/gpt2")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    assert!(!stdout.contains("\x1b["), "Color never should NOT produce ANSI codes");
+}
+
+// ---------------------------------------------------------------------------
+// 29. test_no_ignore_flag
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_no_ignore_flag() {
+    let tmp = TempDir::new().unwrap();
+    write_file(tmp.path(), "main.py", "print('hello')");
+    write_file(tmp.path(), "__pycache__/cached.pyc", "compiled");
+
+    let assert = tokn_cmd()
+        .arg("--no-ignore")
+        .arg("--json")
+        .arg(tmp.path())
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(stdout).unwrap();
+    let files = parsed["files"].as_array().unwrap();
+
+    assert!(files.iter().any(|f| f["path"].as_str().unwrap().contains("main.py")));
+    assert!(files.iter().any(|f| f["path"].as_str().unwrap().contains("cached.pyc")), "cached.pyc should appear with --no-ignore");
+}
+
+// ---------------------------------------------------------------------------
+// 30. test_completions_bash
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_completions_bash() {
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("completions")
+        .arg("bash")
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    assert!(stdout.contains("complete"), "Bash completion should contain 'complete'");
+}
+
+// ---------------------------------------------------------------------------
+// 31. test_exit_code_error
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_exit_code_error() {
+    Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--color").arg("never")
+        .arg("--model").arg("definitely-not-a-real-model-xyz-12345")
+        .arg(".")
+        .assert()
+        .code(1); // error exit code
+}
+
+// ---------------------------------------------------------------------------
+// 32. test_help_contains_examples
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_help_contains_examples() {
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--help")
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    assert!(stdout.contains("Examples:"), "Help should contain Examples section");
+}
+
+// ---------------------------------------------------------------------------
+// 33. test_help_contains_all_flags
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_help_contains_all_flags() {
+    let assert = Command::cargo_bin("tokn")
+        .unwrap()
+        .arg("--help")
+        .assert()
+        .success();
+
+    let stdout = std::str::from_utf8(&assert.get_output().stdout).unwrap();
+    for flag in &["--ext", "--exclude-ext", "--hidden", "--model", "--per-file",
+                   "--json", "--sort", "--sort-reverse", "--max-depth", "--verbose", "--quiet",
+                   "--color", "--no-ignore"] {
+        assert!(stdout.contains(flag), "Help should contain flag: {}", flag);
+    }
+}
