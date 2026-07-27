@@ -6,16 +6,34 @@ Powered by [gigatoken](https://github.com/marcelroed/gigatoken) under the hood, 
 
 ## Install
 
+tokn is a native Rust binary — no Python, no pip, no venv.
+
+### Pre-built binaries (coming soon)
+
 ```bash
-pip install tokn
+# macOS / Linux
+curl -fsSL https://github.com/HenryGetz/tokn/releases/latest/download/tokn-$(uname -s)-$(uname -m) -o tokn
+chmod +x tokn
+sudo mv tokn /usr/local/bin/
 ```
 
-Or from source:
+### From source
 
 ```bash
 git clone https://github.com/HenryGetz/tokn.git
 cd tokn
-pip install -e .
+cargo +nightly build -Zprofile-rustflags --release
+sudo cp target/release/tokn /usr/local/bin/
+```
+
+Requires [Rust](https://rustup.rs) nightly toolchain.
+
+### Shell completions
+
+```bash
+tokn completions bash > ~/.local/share/bash-completion/completions/tokn
+tokn completions zsh  > ~/.zfunc/_tokn
+tokn completions fish > ~/.config/fish/completions/tokn.fish
 ```
 
 ## Usage
@@ -39,14 +57,12 @@ $ echo "hello world" | tokn
 See what's eating your context budget:
 
 ```bash
-$ tokn --per-file
-       115  pyproject.toml
-     2,759  tokn/cli.py
-        14  tokn/__init__.py
-         9  tokn/__main__.py
-       859  tests/test_cli.py
+$ tokn --per-file --sort
+        2,759  src/main.rs
+          115  Cargo.toml
+           14  .gitignore
 ──────────
-3,756
+        2,888
 ```
 
 JSON for the spreadsheet people:
@@ -55,10 +71,27 @@ JSON for the spreadsheet people:
 $ tokn --json
 {
   "files": [
-    {"path": "src/main.py", "tokens": 1234, "skipped": false}
+    {"path": "src/main.rs", "tokens": 2759, "skipped": false}
   ],
-  "total": 1234
+  "total": 2759
 }
+```
+
+Limit directory depth:
+
+```bash
+$ tokn --max-depth 1
+1,234
+```
+
+Verbose mode (see what's happening):
+
+```bash
+$ tokn --verbose
+Info: using tokenizer: Xenova/gpt-4o
+Info: found 47 files
+Info: counted 47 files, skipped 0 unreadable
+3,756
 ```
 
 ## Flags
@@ -68,10 +101,18 @@ $ tokn --json
 | `--ext .py` `-e .py` | Only count files with this extension. Repeatable. |
 | `--exclude-ext .pyc` `-E .pyc` | Skip files with this extension. Repeatable. |
 | `--hidden` `-H` | Count hidden files too. Hope you know what you're doing. |
-| `--model gpt-4o` `-m gpt-4o` | Use a specific model's tokenizer. Different models, different counts. |
+| `--model gpt-4o` `-m gpt-4o` | Model/tokenizer to use. Different models, different counts. |
 | `--per-file` `-p` | Show per-file breakdown. |
 | `--json` `-j` | Output as JSON. |
-| `--version` `-v` | `tokn 0.1.0 (gigatoken 0.9.0)` |
+| `--sort` `-s` | Sort per-file output by token count (highest first). |
+| `--sort-reverse` `-S` | Sort per-file output by token count (lowest first). |
+| `--max-depth N` `-d N` | Limit directory recursion depth (0 = no subdirs). |
+| `--no-ignore` `-I` | Don't skip `__pycache__`, `.git`, `node_modules`, etc. |
+| `--verbose` `-v` | Print diagnostic info to stderr. |
+| `--quiet` `-q` | Suppress all warnings. |
+| `--color auto` | Terminal color control: `always`, `never`, or `auto` (default). |
+| `--version` `-V` | Show version info. |
+| `tokn completions SHELL` | Generate shell completions. |
 
 ## Why not just use `wc -c`?
 
@@ -87,6 +128,8 @@ You totally can. `tiktoken` is great for `len(enc.encode("hello world"))`. `giga
 your files → gigatoken Rust core → token counts → your terminal
               (24 GB/s, baby)
 ```
+
+tokn itself is pure Rust — the entire heavy-lift tokenization pipeline runs in native code with no Python FFI overhead. First run downloads the tokenizer from HuggingFace Hub (~1 MB) and caches it to `~/.cache/huggingface/`. Subsequent runs are instant.
 
 Skips `__pycache__`, `.egg-info`, `.git`, `node_modules`, `.pytest_cache`, and friends by default. Because nobody needs to know how many tokens their build artifacts are.
 
